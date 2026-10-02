@@ -1,0 +1,164 @@
+---
+import { Image } from "astro:assets";
+import logoNgg from "../assets/logoh.png";
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="NGG - Completa tu registro">
+  <section class="bg-gray-50 dark:bg-gray-900">
+    <div class="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
+      <div class="mb-4">
+        <Image src={logoNgg} alt="Ngg Store tu tienda tecnológica." width="300" />
+      </div>
+
+      <div class="w-full bg-white rounded-lg shadow dark:border md:mt-0 sm:max-w-md xl:p-0 dark:bg-gray-800 dark:border-gray-700">
+        <div class="p-6 space-y-4 md:space-y-6 sm:p-8">
+
+          <div id="loading-state">
+            <p class="text-gray-500 dark:text-gray-400">Verificando invitación...</p>
+          </div>
+
+          <div id="invalid-state" class="hidden">
+            <h1 class="text-xl font-bold text-gray-900 dark:text-white">Invitación no válida</h1>
+            <p id="invalid-message" class="text-sm text-gray-500 dark:text-gray-400 mt-2"></p>
+            <a href="/" class="inline-block mt-4 text-sm font-medium text-blue-600 hover:underline dark:text-blue-500">Volver al inicio</a>
+          </div>
+
+          <div id="register-state" class="hidden">
+            <h1 class="text-xl font-bold leading-tight tracking-tight text-gray-900 md:text-2xl dark:text-white">
+              Completa tu registro
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Cuenta para: <span id="invite-email" class="font-medium"></span>
+            </p>
+
+            <p id="register-error" class="hidden text-sm font-medium text-red-600 dark:text-red-500 mt-2"></p>
+
+            <form id="register-form" class="space-y-4 md:space-y-6 mt-4">
+              <div>
+                <label for="password" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Crea tu contraseña</label>
+                <input
+                  type="password"
+                  name="password"
+                  id="password"
+                  placeholder="••••••••"
+                  class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                  required
+                  minlength="8"
+                />
+              </div>
+              <div>
+                <label for="password-confirm" class="block mb-2 text-sm font-medium text-gray-900 dark:text-white">Confirma tu contraseña</label>
+                <input
+                  type="password"
+                  name="password-confirm"
+                  id="password-confirm"
+                  placeholder="••••••••"
+                  class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                  required
+                  minlength="8"
+                />
+              </div>
+              <button
+                type="submit"
+                class="w-full text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800"
+              >Crear cuenta</button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL;
+
+    const loadingState = document.querySelector<HTMLDivElement>("#loading-state");
+    const invalidState = document.querySelector<HTMLDivElement>("#invalid-state");
+    const invalidMessage = document.querySelector<HTMLParagraphElement>("#invalid-message");
+    const registerState = document.querySelector<HTMLDivElement>("#register-state");
+    const inviteEmailEl = document.querySelector<HTMLSpanElement>("#invite-email");
+    const registerForm = document.querySelector<HTMLFormElement>("#register-form");
+    const registerError = document.querySelector<HTMLParagraphElement>("#register-error");
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    function showInvalid(message: string) {
+      loadingState?.classList.add("hidden");
+      registerState?.classList.add("hidden");
+      if (invalidMessage) invalidMessage.textContent = message;
+      invalidState?.classList.remove("hidden");
+    }
+
+    async function validateToken() {
+      if (!token) {
+        showInvalid("Falta el token de invitación en el enlace.");
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/invitations/${token}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          showInvalid(data.error || "No se pudo validar la invitación.");
+          return;
+        }
+
+        if (inviteEmailEl) inviteEmailEl.textContent = data.email;
+        loadingState?.classList.add("hidden");
+        registerState?.classList.remove("hidden");
+      } catch (err) {
+        console.error("Error validando invitación:", err);
+        showInvalid("No se pudo conectar con el servidor.");
+      }
+    }
+
+    registerForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      registerError?.classList.add("hidden");
+
+      const password = document.querySelector<HTMLInputElement>("#password")?.value;
+      const passwordConfirm = document.querySelector<HTMLInputElement>("#password-confirm")?.value;
+
+      if (password !== passwordConfirm) {
+        if (registerError) {
+          registerError.textContent = "Las contraseñas no coinciden";
+          registerError.classList.remove("hidden");
+        }
+        return;
+      }
+
+      try {
+        const res = await fetch(`${API_URL}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ token, password }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (registerError) {
+            registerError.textContent = data.error || "Error al crear la cuenta";
+            registerError.classList.remove("hidden");
+          }
+          return;
+        }
+
+        window.location.href = "/dashboard";
+      } catch (err) {
+        console.error("Error al registrar:", err);
+        if (registerError) {
+          registerError.textContent = "No se pudo conectar con el servidor";
+          registerError.classList.remove("hidden");
+        }
+      }
+    });
+
+    validateToken();
+  </script>
+</Layout>

@@ -1,0 +1,326 @@
+---
+import AppLayout from "../layouts/AppLayout.astro";
+---
+
+<AppLayout title="NGG - Gestión de usuarios">
+  <div class="max-w-5xl mx-auto px-4 py-8">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">
+      Gestión de usuarios
+    </h1>
+
+    <!-- Bloque de invitación -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-8">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        Invitar nuevo usuario
+      </h2>
+
+      <form id="invite-form" class="flex flex-col sm:flex-row gap-3 items-end">
+        <div class="flex-1 w-full">
+          <label
+            for="invite-email"
+            class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
+            >Email</label
+          >
+          <input
+            type="email"
+            id="invite-email"
+            required
+            placeholder="persona@ngg.cl"
+            class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          />
+        </div>
+        <div class="w-full sm:w-40">
+          <label
+            for="invite-role"
+            class="block mb-2 text-sm font-medium text-gray-900 dark:text-white"
+            >Rol</label
+          >
+          <select
+            id="invite-role"
+            class="bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-primary-600 focus:border-primary-600 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          >
+            <option value="user">Usuario</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <button
+          type="submit"
+          class="text-white bg-blue-600 hover:bg-blue-700 focus:ring-4 focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 whitespace-nowrap"
+          >Generar invitación</button
+        >
+      </form>
+
+      <p
+        id="invite-error"
+        class="hidden text-sm font-medium text-red-600 dark:text-red-500 mt-3"
+      >
+      </p>
+
+      <div
+        id="invite-result"
+        class="hidden mt-4 p-3 bg-blue-50 dark:bg-gray-700 rounded-lg"
+      >
+        <p class="text-sm text-gray-700 dark:text-gray-300 mb-2">
+          Link de invitación generado (expira en 48hs):
+        </p>
+        <div class="flex gap-2">
+          <input
+            id="invite-link-input"
+            type="text"
+            readonly
+            class="flex-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg p-2 text-sm"
+          />
+          <button
+            id="copy-link-button"
+            type="button"
+            class="text-blue-600 dark:text-blue-400 border border-blue-600 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-gray-600 rounded-lg px-3 py-2 text-sm whitespace-nowrap"
+            >Copiar</button
+          >
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabla de usuarios -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
+      <table class="w-full text-sm text-left text-gray-700 dark:text-gray-300">
+        <thead
+          class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400"
+        >
+          <tr>
+            <th class="px-6 py-3">Email</th>
+            <th class="px-6 py-3">Rol</th>
+            <th class="px-6 py-3">Creado</th>
+            <th class="px-6 py-3 text-right">Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body">
+          <tr>
+            <td colspan="4" class="px-6 py-4 text-center text-gray-500"
+              >Cargando usuarios...</td
+            >
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = import.meta.env.PUBLIC_API_URL;
+
+    const inviteForm = document.querySelector<HTMLFormElement>("#invite-form");
+    const inviteError =
+      document.querySelector<HTMLParagraphElement>("#invite-error");
+    const inviteResult =
+      document.querySelector<HTMLDivElement>("#invite-result");
+    const inviteLinkInput =
+      document.querySelector<HTMLInputElement>("#invite-link-input");
+    const copyLinkButton =
+      document.querySelector<HTMLButtonElement>("#copy-link-button");
+    const tableBody =
+      document.querySelector<HTMLTableSectionElement>("#users-table-body");
+
+    let currentUserId: number | null = null;
+
+    async function loadCurrentUser() {
+      const res = await fetch(`${API_URL}/me`, { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        currentUserId = data.user.userId;
+      }
+    }
+
+    async function loadUsers() {
+      const res = await fetch(`${API_URL}/users`, { credentials: "include" });
+
+      if (!res.ok) {
+        if (tableBody) {
+          tableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Error al cargar usuarios</td></tr>`;
+        }
+        return;
+      }
+
+      const data = await res.json();
+      renderUsers(data.users);
+    }
+
+    function renderUsers(
+      users: Array<{
+        id: number;
+        email: string;
+        role: string;
+        createdAt: string;
+      }>,
+    ) {
+      if (!tableBody) return;
+
+      tableBody.innerHTML = users
+        .map((u) => {
+          const isSelf = u.id === currentUserId;
+          const date = new Date(u.createdAt).toLocaleDateString("es-CL");
+          const toggleRole = u.role === "admin" ? "user" : "admin";
+          const toggleLabel =
+            u.role === "admin" ? "Quitar admin" : "Hacer admin";
+
+          return `
+						<tr class="border-b dark:border-gray-700">
+							<td class="px-6 py-4">${u.email}${isSelf ? ' <span class="text-xs text-gray-400">(tú)</span>' : ""}</td>
+							<td class="px-6 py-4">
+								<span class="px-2 py-1 rounded text-xs font-medium ${u.role === "admin" ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"}">
+									${u.role}
+								</span>
+							</td>
+							<td class="px-6 py-4">${date}</td>
+							<td class="px-6 py-4 text-right space-x-2">
+								${
+                  isSelf
+                    ? ""
+                    : `<button data-action="toggle-role" data-id="${u.id}" data-role="${toggleRole}" class="text-blue-600 hover:underline text-xs font-medium">${toggleLabel}</button>
+										<button data-action="delete" data-id="${u.id}" class="text-red-600 hover:underline text-xs font-medium">Eliminar</button>`
+                }
+							</td>
+						</tr>
+					`;
+        })
+        .join("");
+    }
+
+    tableBody?.addEventListener("click", async (e) => {
+      const target = e.target as HTMLElement;
+      const action = target.dataset.action;
+      const id = target.dataset.id;
+
+      if (!action || !id) return;
+
+      if (action === "toggle-role") {
+        const role = target.dataset.role;
+        const res = await fetch(`${API_URL}/users/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ role }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || "Error al cambiar el rol");
+          return;
+        }
+        loadUsers();
+      }
+
+      if (action === "delete") {
+        const confirmed = confirm(
+          "¿Seguro que quieres eliminar este usuario? Esta acción no se puede deshacer.",
+        );
+        if (!confirmed) return;
+
+        const res = await fetch(`${API_URL}/users/${id}`, {
+          method: "DELETE",
+          credentials: "include",
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.error || "Error al eliminar el usuario");
+          return;
+        }
+        loadUsers();
+      }
+    });
+
+    inviteForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      inviteError?.classList.add("hidden");
+      inviteResult?.classList.add("hidden");
+
+      const email =
+        document.querySelector<HTMLInputElement>("#invite-email")?.value;
+      const role =
+        document.querySelector<HTMLSelectElement>("#invite-role")?.value;
+
+      try {
+        const res = await fetch(`${API_URL}/invitations`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, role }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (inviteError) {
+            inviteError.textContent =
+              data.error || "Error al generar la invitación";
+            inviteError.classList.remove("hidden");
+          }
+          return;
+        }
+
+        if (inviteLinkInput) inviteLinkInput.value = data.inviteLink;
+        inviteResult?.classList.remove("hidden");
+        inviteForm.reset();
+      } catch (err) {
+        console.error("Error al invitar:", err);
+        if (inviteError) {
+          inviteError.textContent = "No se pudo conectar con el servidor";
+          inviteError.classList.remove("hidden");
+        }
+      }
+    });
+
+    copyLinkButton?.addEventListener("click", async () => {
+      if (!inviteLinkInput || !copyLinkButton) return;
+
+      const text = inviteLinkInput.value;
+      let copied = false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        }
+      } catch (err) {
+        console.error("Error con Clipboard API:", err);
+      }
+
+      if (!copied) {
+        inviteLinkInput.select();
+        inviteLinkInput.setSelectionRange(0, text.length);
+        try {
+          copied = document.execCommand("copy");
+        } catch (err) {
+          console.error("Error con fallback execCommand:", err);
+        }
+      }
+
+      const originalText = "Copiar";
+      copyLinkButton.textContent = copied ? "¡Copiado! ✓" : "Error al copiar";
+      copyLinkButton.disabled = true;
+
+      setTimeout(() => {
+        copyLinkButton.textContent = originalText;
+        copyLinkButton.disabled = false;
+      }, 2000);
+    });
+
+    async function init() {
+      const res = await fetch(`${API_URL}/me`, { credentials: "include" });
+
+      if (!res.ok) {
+        window.location.href = "/";
+        return;
+      }
+
+      const data = await res.json();
+
+      if (data.user.role !== "admin") {
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      currentUserId = data.user.userId;
+      await loadUsers();
+    }
+
+    init();
+  </script>
+</AppLayout>

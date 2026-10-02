@@ -1,11 +1,42 @@
 ---
-import Welcome from '../components/Welcome.astro';
+import LoginForm from '../components/LoginForm.astro';
 import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
 ---
 
-<Layout>
-	<Welcome />
+<Layout title="NGG Login">
+	<div id="login-check" style="display: none;">
+		<LoginForm />
+	</div>
+
+	<script>
+		const API_URL = import.meta.env.PUBLIC_API_URL;
+		const container = document.querySelector<HTMLDivElement>("#login-check");
+
+		async function checkSession() {
+			try {
+				const res = await fetch(`${API_URL}/me`, {
+					credentials: "include",
+				});
+
+				if (res.ok) {
+					// Ya tiene sesión activa, lo mandamos al dashboard
+					window.location.href = "/dashboard";
+					return;
+				}
+
+				// No autenticado, mostramos el login normalmente
+				if (container) {
+					container.style.display = "";
+				}
+			} catch (err) {
+				console.error("Error verificando sesión:", err);
+				// Si falla la verificación, mostramos el login de todos modos
+				if (container) {
+					container.style.display = "";
+				}
+			}
+		}
+
+		checkSession();
+	</script>
 </Layout>
