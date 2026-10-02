@@ -79,7 +79,36 @@ import AppLayout from "../layouts/AppLayout.astro";
         </div>
       </div>
     </div>
+    <!-- Invitaciones pendientes -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-8">
+      <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+        Invitaciones pendientes
+      </h2>
 
+      <div class="overflow-x-auto">
+        <table
+          class="w-full text-sm text-left text-gray-700 dark:text-gray-300"
+        >
+          <thead
+            class="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400"
+          >
+            <tr>
+              <th class="px-6 py-3">Email</th>
+              <th class="px-6 py-3">Rol</th>
+              <th class="px-6 py-3">Expira</th>
+              <th class="px-6 py-3 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="invitations-table-body">
+            <tr>
+              <td colspan="4" class="px-6 py-4 text-center text-gray-500"
+                >Cargando invitaciones...</td
+              >
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
     <!-- Tabla de usuarios -->
     <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-x-auto">
       <table class="w-full text-sm text-left text-gray-700 dark:text-gray-300">
@@ -142,6 +171,90 @@ import AppLayout from "../layouts/AppLayout.astro";
       const data = await res.json();
       renderUsers(data.users);
     }
+
+    const invitationsTableBody =
+      document.querySelector<HTMLTableSectionElement>(
+        "#invitations-table-body",
+      );
+
+    async function loadInvitations() {
+      const res = await fetch(`${API_URL}/invitations`, {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        if (invitationsTableBody) {
+          invitationsTableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Error al cargar invitaciones</td></tr>`;
+        }
+        return;
+      }
+
+      const data = await res.json();
+      renderInvitations(data.invitations);
+    }
+
+    function renderInvitations(
+      invitations: Array<{
+        id: number;
+        email: string;
+        role: string;
+        expiresAt: string;
+      }>,
+    ) {
+      if (!invitationsTableBody) return;
+
+      if (invitations.length === 0) {
+        invitationsTableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No hay invitaciones pendientes</td></tr>`;
+        return;
+      }
+
+      invitationsTableBody.innerHTML = invitations
+        .map((inv) => {
+          const expires = new Date(inv.expiresAt).toLocaleString("es-CL");
+
+          return `
+				<tr class="border-b dark:border-gray-700">
+					<td class="px-6 py-4">${inv.email}</td>
+					<td class="px-6 py-4">
+						<span class="px-2 py-1 rounded text-xs font-medium ${inv.role === "admin" ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300" : "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300"}">
+							${inv.role}
+						</span>
+					</td>
+					<td class="px-6 py-4">${expires}</td>
+					<td class="px-6 py-4 text-right">
+						<button data-action="revoke-invite" data-id="${inv.id}" class="text-red-600 hover:underline text-xs font-medium">Revocar</button>
+					</td>
+				</tr>
+			`;
+        })
+        .join("");
+    }
+
+    invitationsTableBody?.addEventListener("click", async (e) => {
+      const target = e.target as HTMLElement;
+      const action = target.dataset.action;
+      const id = target.dataset.id;
+
+      if (action !== "revoke-invite" || !id) return;
+
+      const confirmed = confirm(
+        "¿Revocar esta invitación? El link dejará de funcionar.",
+      );
+      if (!confirmed) return;
+
+      const res = await fetch(`${API_URL}/invitations/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Error al revocar la invitación");
+        return;
+      }
+
+      loadInvitations();
+    });
 
     function renderUsers(
       users: Array<{
@@ -258,6 +371,7 @@ import AppLayout from "../layouts/AppLayout.astro";
         if (inviteLinkInput) inviteLinkInput.value = data.inviteLink;
         inviteResult?.classList.remove("hidden");
         inviteForm.reset();
+        loadInvitations();
       } catch (err) {
         console.error("Error al invitar:", err);
         if (inviteError) {
@@ -319,6 +433,7 @@ import AppLayout from "../layouts/AppLayout.astro";
 
       currentUserId = data.user.userId;
       await loadUsers();
+      await loadInvitations();
     }
 
     init();
